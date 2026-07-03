@@ -73,6 +73,11 @@ docker run -d --name exif-timeline -e TLS_HOST=192.168.1.50 \
   -p 9003:9003 -p 9443:9443 -v exif-certs:/etc/nginx/certs \
   --restart unless-stopped exif-timeline
 ```
+업데이트(최신 코드 → 재빌드·재기동 → 안 쓰는 이미지 정리):
+```bash
+./update.sh
+```
+
 - 헬스체크: `GET /healthz` → `ok`
 - Synology(DSM): Container Manager에서 이 저장소로 프로젝트 생성 → `docker-compose.yml` 사용.
   Immich와 같은 NAS에 함께 올려두면 편하다.
