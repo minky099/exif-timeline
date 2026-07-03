@@ -5,5 +5,15 @@ services:
     pull_policy: build   # 레지스트리 pull 시도(경고) 없이 항상 로컬 빌드
     container_name: exif-timeline
     ports:
-      - "9003:9003"   # 9003 = EXIF DateTimeOriginal 태그 0x9003
+      - "9003:9003"   # HTTP  (9003 = EXIF DateTimeOriginal 태그 0x9003)
+      - "9443:9443"   # HTTPS (자체서명 · 공유시트 일괄 저장용)
+    environment:
+      # 아이폰에서 https로 접속할 NAS의 IP나 호스트명. 자체서명 인증서 SAN에 포함된다.
+      # 예: TLS_HOST=192.168.1.50  (docker compose 실행 시 환경변수로 넘기거나 여기 직접 기입)
+      - TLS_HOST=${TLS_HOST:-}
+    volumes:
+      - exif-certs:/etc/nginx/certs   # 인증서 영속(재시작해도 유지)
     restart: unless-stopped
+
+volumes:
+  exif-certs:

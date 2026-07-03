@@ -95,6 +95,22 @@ input[type=range]{width:100%;accent-color:var(--group);}
   border:none;border-radius:8px;font-size:11px;font-weight:700;padding:4px 6px;cursor:pointer;line-height:1;}
 .card .split:active{background:var(--group);color:#fff;}
 
+/* 그룹별 시간대 듀얼 슬라이더 */
+.range{padding:2px 12px 0;margin:2px 0 4px;}
+.range-track{position:relative;height:26px;margin:6px 0 2px;}
+.range-track::before{content:"";position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+  height:5px;border-radius:3px;background:#0c0e12;border:1px solid var(--line);}
+.range-fill{position:absolute;top:50%;transform:translateY(-50%);height:5px;border-radius:3px;
+  background:var(--group);opacity:.9;}
+.range-thumb{position:absolute;top:50%;width:22px;height:22px;margin-left:-11px;
+  transform:translateY(-50%);border-radius:50%;background:var(--group);border:2px solid #fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.5);touch-action:none;cursor:grab;z-index:2;}
+.range-thumb[data-thumb="e"]{background:#a58bff;}
+.range-thumb.active{width:26px;height:26px;margin-left:-13px;}
+.range-labels{display:flex;justify-content:space-between;font-size:.74rem;color:var(--muted);
+  font-variant-numeric:tabular-nums;padding:0 1px;}
+.range-labels .te{color:#b9a6ff;}
+
 .results{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;}
 .results figure{margin:0;position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);}
 .results img{width:100%;display:block;aspect-ratio:1/1;object-fit:cover;}
@@ -133,32 +149,27 @@ progress{width:100%;height:6px;margin-top:8px;accent-color:var(--accent);}
   </section>
 
   <section>
-    <div class="sec-title"><b>2.</b> 시간 범위 &amp; 묶음 간격</div>
+    <div class="sec-title"><b>2.</b> 전체 타임라인</div>
     <div class="row">
       <div class="field">
-        <label>시작시각 (첫 사진)</label>
+        <label>전체 시작 (타임라인 왼쪽)</label>
         <input id="startAt" type="datetime-local" step="1">
       </div>
       <div class="field">
-        <label>끝시각 (마지막 사진)</label>
+        <label>전체 끝 (타임라인 오른쪽)</label>
         <input id="endAt" type="datetime-local" step="1">
       </div>
     </div>
-    <div style="margin-top:12px">
-      <div class="slider-head">
-        <label style="font-size:.76rem;color:var(--muted)">묶음 사이 벌어짐 (경계 가중치)</label>
-        <span class="v" id="wbdVal">8×</span>
-      </div>
-      <input id="wbd" type="range" min="1" max="20" step="1" value="8">
-      <div class="hint">묶음 <b>안</b>은 촘촘하게, 묶음 <b>사이</b>는 이 배수만큼 넓게 벌립니다. (내부 간격 = 1×)</div>
-    </div>
+    <div class="hint">이 시각 범위가 아래 각 묶음 슬라이더의 <b>좌우 끝</b>이 됩니다.
+      묶음별 시간대는 아래 <b>3.</b>에서 슬라이더로 각각 정합니다.</div>
     <div id="rangeWarn"></div>
   </section>
 
   <section>
     <div class="sec-title"><b>3.</b> 순서 &amp; 묶음 <span style="color:var(--dim)" id="countLbl"></span></div>
     <div class="hint" style="margin-top:0;margin-bottom:10px">
-      ≡ 손잡이를 끌어 <b>순서 변경</b> · 썸네일의 <b>나누기</b>로 묶음 경계 추가 · 묶음 머리의 <b>합치기</b>로 경계 제거
+      ≡ 손잡이를 끌어 <b>순서 변경</b>(묶음 간 이동 포함) · 썸네일의 <b>나누기</b>로 경계 추가 · 묶음 머리의 <b>합치기</b>로 제거<br>
+      각 묶음의 <b>슬라이더 양 끝</b>을 끌어 그 묶음의 시간대를 정하세요. 묶음 안은 그 구간에 고르게 배분됩니다.
     </div>
     <div id="groups" class="groups"></div>
     <div id="emptyMsg" class="empty">위에서 사진을 추가하세요.</div>
@@ -2680,6 +2691,7 @@ SOFTWARE.
   // ---- state ----
   var photos = [];            // {id,file,name,thumbURL}
   var breaks = new Set();     // positional: 경계 = index i (1..n-1) 앞
+  var groupFracs = [];        // 그룹별 시간창 [{s,e}] — 전체 [S,E]에 대한 비율(0..1)
   var seq = 0;
   var built = [];             // {file, blob, name, timeStr, url}
   var objectUrls = [];
@@ -2700,7 +2712,6 @@ SOFTWARE.
            pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
   }
   function parseLocal(v){
-    // "YYYY-MM-DDTHH:MM[:SS]" as LOCAL time
     if(!v) return null;
     var m = v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
     if(!m) return null;
@@ -2766,24 +2777,45 @@ SOFTWARE.
     if(cur.length) groups.push(cur);
     return groups;
   }
+  // 그룹 수가 바뀌면 시간창을 균등 분할로 초기화, 같으면 유지
+  function defaultFracs(G){
+    var a=[]; for(var i=0;i<G;i++) a.push({s:i/G, e:(i+1)/G}); return a;
+  }
+  function syncGroupFracs(G){
+    if(G<=0){ groupFracs=[]; return; }
+    if(groupFracs.length!==G){ groupFracs = defaultFracs(G); }
+  }
 
-  // ---- time distribution ----
+  // ---- time distribution (그룹별 시간창) ----
+  function bounds(){
+    var s=parseLocal($("startAt").value), e=parseLocal($("endAt").value);
+    if(!s||!e) return null;
+    return { S:Math.floor(s.getTime()/1000), E:Math.floor(e.getTime()/1000) };
+  }
   function computeTimes(){
     var n = photos.length;
-    var s = parseLocal($("startAt").value), e = parseLocal($("endAt").value);
-    if(!s || !e) return {ok:false, reason:"시각 형식 오류"};
-    var startSec = Math.floor(s.getTime()/1000), endSec = Math.floor(e.getTime()/1000);
-    if(n===0) return {ok:true, dates:[]};
-    if(n===1) return {ok:true, dates:[new Date(startSec*1000)]};
-    if(endSec <= startSec) return {ok:false, reason:"끝시각이 시작시각보다 뒤여야 합니다"};
-    var wbd = +$("wbd").value, win = 1, total = endSec - startSec;
-    var gapW=[], sum=0;
-    for(var i=1;i<n;i++){ var w = breaks.has(i)? wbd : win; gapW.push(w); sum+=w; }
-    var unit = sum>0 ? total/sum : 0;
-    var secs=[startSec], acc=0;
-    for(var j=1;j<n;j++){ acc += unit*gapW[j-1]; secs.push(startSec + Math.floor(acc)); }
-    secs[n-1] = endSec; // 마지막은 끝시각 정확히
-    return {ok:true, dates: secs.map(function(x){ return new Date(x*1000); }) };
+    var b = bounds();
+    if(!b) return {ok:false, reason:"시각 형식 오류", groups:groupsOf()};
+    if(n===0) return {ok:true, dates:[], groups:[]};
+    if(b.E <= b.S) return {ok:false, reason:"전체 끝시각이 시작보다 뒤여야 합니다", groups:groupsOf()};
+    var groups = groupsOf(), G = groups.length; syncGroupFracs(G);
+    var total = b.E - b.S;
+    var times = new Array(n);
+    for(var gi=0; gi<G; gi++){
+      var g=groups[gi], fr=groupFracs[gi];
+      var gs=b.S+Math.round(fr.s*total), ge=b.S+Math.round(fr.e*total);
+      var k=g.length;
+      if(k>1 && ge<=gs+(k-1)) ge=gs+(k-1); // 그룹 내 최소 1초 간격 보장
+      for(var j=0;j<k;j++){
+        var idx=g[j], t;
+        if(k===1) t = Math.round((gs+ge)/2);
+        else t = gs + Math.floor((ge-gs)*j/(k-1));
+        times[idx]=t;
+      }
+    }
+    // 전역 단조 증가 보장(모두 서로 다른 시각)
+    for(var i2=1;i2<n;i2++){ if(times[i2] <= times[i2-1]) times[i2] = times[i2-1]+1; }
+    return {ok:true, dates: times.map(function(x){return new Date(x*1000);}), groups:groups};
   }
   function fmtTime(d, multiDay){
     var t = pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
@@ -2794,78 +2826,119 @@ SOFTWARE.
            pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
   }
 
-  // ---- render ----
+  // ---- render (구조 재빌드) ----
   function render(){
     var n = photos.length;
     $("countLbl").textContent = n? "· "+n+"장" : "";
     $("emptyMsg").style.display = n? "none":"block";
-    var comp = computeTimes();
-    // range warning
-    var rw = $("rangeWarn");
-    if(!comp.ok){ rw.innerHTML = '<div class="banner bad" style="margin-top:10px">'+escapeHtml(comp.reason)+'</div>'; }
-    else rw.innerHTML = "";
 
-    var dates = comp.ok ? comp.dates : [];
-    var multiDay = dates.length>1 &&
-      (dates[0].toDateString() !== dates[dates.length-1].toDateString());
-
+    var groups = groupsOf(); syncGroupFracs(groups.length);
     var wrap = $("groups");
     wrap.innerHTML = "";
-    var groups = groupsOf();
     groups.forEach(function(g, gi){
       var box = document.createElement("div");
       box.className = "group" + (gi%2? " g-alt":"");
       var head = document.createElement("div");
       head.className="group-head";
-      var mergeBtn = "";
-      if(gi>0){
-        mergeBtn = '<button class="merge" data-merge="'+g[0]+'">⭱ 위와 합치기</button>';
-      }
+      var mergeBtn = gi>0 ? '<button class="merge" data-merge="'+g[0]+'">⭱ 위와 합치기</button>' : "";
       head.innerHTML = '<span class="gtag"><span class="dot"></span>묶음 '+(gi+1)+' · '+g.length+'장</span>'+mergeBtn;
       box.appendChild(head);
 
+      // 그룹 시간대 듀얼 슬라이더
+      var range = document.createElement("div");
+      range.className="range"; range.dataset.group=gi;
+      range.innerHTML =
+        '<div class="range-track" data-group="'+gi+'">'+
+          '<div class="range-fill"></div>'+
+          '<div class="range-thumb" data-group="'+gi+'" data-thumb="s"></div>'+
+          '<div class="range-thumb" data-group="'+gi+'" data-thumb="e"></div>'+
+        '</div>'+
+        '<div class="range-labels"><span class="ts"></span><span class="te"></span></div>';
+      box.appendChild(range);
+
       var grid = document.createElement("div");
       grid.className="thumbs";
-      g.forEach(function(idx){
-        grid.appendChild(cardEl(idx, dates[idx], multiDay));
-      });
+      g.forEach(function(idx){ grid.appendChild(cardEl(idx)); });
       box.appendChild(grid);
       wrap.appendChild(box);
     });
 
-    // dock summary
-    var canProcess = n>0 && comp.ok;
-    $("processBtn").disabled = !canProcess;
-    if(!n){ $("dockSummary").textContent = "사진을 추가하면 배정 시각이 미리 계산됩니다."; }
-    else if(!comp.ok){ $("dockSummary").textContent = comp.reason; }
-    else if(n===1){ $("dockSummary").textContent = "1장 · "+fmtTime(dates[0],multiDay); }
+    refreshTimes();
+  }
+
+  // ---- refreshTimes (구조 유지, 시각/슬라이더만 갱신) ----
+  function refreshTimes(){
+    var comp = computeTimes();
+    var rw = $("rangeWarn");
+    if(!comp.ok){
+      rw.innerHTML = '<div class="banner bad" style="margin-top:10px">'+escapeHtml(comp.reason)+'</div>';
+      $("processBtn").disabled = true;
+      $("dockSummary").textContent = comp.reason;
+      resetBuilt();
+      return;
+    }
+    rw.innerHTML = "";
+    var dates = comp.dates, n = dates.length, groups = comp.groups;
+    if(!n){
+      $("processBtn").disabled = true;
+      $("dockSummary").textContent = "사진을 추가하면 배정 시각이 미리 계산됩니다.";
+      resetBuilt();
+      return;
+    }
+    var multiDay = n>1 && (dates[0].toDateString() !== dates[n-1].toDateString());
+
+    // 카드 시각 라벨
+    var cards = document.querySelectorAll('#groups .card');
+    cards.forEach(function(c){
+      var i=+c.dataset.index; var el=c.querySelector('.time');
+      if(el && dates[i]) el.textContent = fmtTime(dates[i], multiDay);
+    });
+
+    // 슬라이더 위치/라벨
+    var b = bounds(), total = b.E - b.S;
+    document.querySelectorAll('#groups .range').forEach(function(rangeEl){
+      var gi=+rangeEl.dataset.group, fr=groupFracs[gi]; if(!fr) return;
+      var sPct=fr.s*100, ePct=fr.e*100;
+      rangeEl.querySelector('.range-thumb[data-thumb="s"]').style.left=sPct+'%';
+      rangeEl.querySelector('.range-thumb[data-thumb="e"]').style.left=ePct+'%';
+      var fill=rangeEl.querySelector('.range-fill');
+      fill.style.left=sPct+'%'; fill.style.right=(100-ePct)+'%';
+      rangeEl.querySelector('.ts').textContent=fmtTime(new Date((b.S+Math.round(fr.s*total))*1000), multiDay);
+      rangeEl.querySelector('.te').textContent=fmtTime(new Date((b.S+Math.round(fr.e*total))*1000), multiDay);
+    });
+
+    // dock
+    $("processBtn").disabled = false;
+    if(n===1){ $("dockSummary").textContent = "1장 · "+fmtTime(dates[0],multiDay); }
     else {
       $("dockSummary").textContent = n+"장 · "+groups.length+"묶음 · "+
         fmtTime(dates[0],multiDay)+" - "+fmtTime(dates[n-1],multiDay);
     }
-    // reset previous results if inputs changed after processing
+    resetBuilt();
+  }
+  function resetBuilt(){
     if(built.length){ $("resultSec").style.display="none"; $("processBtn").textContent="EXIF 기입하기"; built=[]; }
   }
 
-  function cardEl(idx, date, multiDay){
+  function cardEl(idx){
     var p = photos[idx];
     var card = document.createElement("div");
     card.className="card"; card.dataset.index = idx;
-    var timeHtml = date ? '<div class="time">'+escapeHtml(fmtTime(date,multiDay))+'</div>' : '';
     var splitHtml = idx>=1 && !breaks.has(idx) ? '<button class="split" data-split="'+idx+'">✂ 나누기</button>' : '';
     card.innerHTML =
       '<img src="'+p.thumbURL+'" alt="">'+
       '<span class="idx">'+(idx+1)+'</span>'+
       '<button class="del" data-del="'+idx+'" aria-label="삭제">×</button>'+
       '<div class="handle" data-handle="'+idx+'">≡</div>'+
-      splitHtml + timeHtml;
+      splitHtml +
+      '<div class="time"></div>';
     return card;
   }
 
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g,function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
-  // ---- delegated controls ----
+  // ---- delegated controls (삭제/나누기/합치기) ----
   $("groups").addEventListener("click", function(ev){
     var t = ev.target;
     if(t.dataset.del!=null){ photos.splice(+t.dataset.del,1); clampBreaks(); render(); return; }
@@ -2873,20 +2946,61 @@ SOFTWARE.
     if(t.dataset.merge!=null){ breaks.delete(+t.dataset.merge); render(); return; }
   });
 
-  // ---- drag reorder (pointer based, iOS friendly) ----
-  var drag=null;
+  // ---- pointerdown 디스패처: 슬라이더 thumb 드래그 / 카드 재배열 ----
   $("groups").addEventListener("pointerdown", function(ev){
+    var thumb = ev.target.closest && ev.target.closest(".range-thumb");
+    if(thumb){ startThumbDrag(ev, thumb); return; }
     var h = ev.target.closest && ev.target.closest(".handle");
-    if(!h) return;
+    if(h){ startCardDrag(ev, h); return; }
+  });
+
+  // ---- 그룹 시간창 thumb 드래그 ----
+  var sdrag=null;
+  function startThumbDrag(ev, thumb){
+    ev.preventDefault();
+    sdrag = { gi:+thumb.dataset.group, which:thumb.dataset.thumb, track:thumb.closest(".range-track") };
+    thumb.classList.add("active");
+    window.addEventListener("pointermove", onThumbMove, {passive:false});
+    window.addEventListener("pointerup", onThumbUp);
+    window.addEventListener("pointercancel", onThumbUp);
+  }
+  function onThumbMove(ev){
+    if(!sdrag) return;
+    ev.preventDefault();
+    var r=sdrag.track.getBoundingClientRect();
+    var frac=(ev.clientX-r.left)/r.width; frac=Math.min(1,Math.max(0,frac));
+    var G=groupFracs.length, gi=sdrag.gi, f=groupFracs[gi];
+    if(sdrag.which==='s'){
+      var lo=gi>0?groupFracs[gi-1].e:0;
+      f.s=Math.min(Math.max(frac,lo),f.e);
+    } else {
+      var hi=gi<G-1?groupFracs[gi+1].s:1;
+      f.e=Math.max(Math.min(frac,hi),f.s);
+    }
+    refreshTimes();
+  }
+  function onThumbUp(){
+    window.removeEventListener("pointermove", onThumbMove);
+    window.removeEventListener("pointerup", onThumbUp);
+    window.removeEventListener("pointercancel", onThumbUp);
+    var a=document.querySelectorAll(".range-thumb.active");
+    for(var i=0;i<a.length;i++) a[i].classList.remove("active");
+    sdrag=null;
+  }
+
+  // ---- 카드 드래그 재배열 (묶음 간 이동 포함, 최근접 슬롯 삽입 + 가장자리 자동스크롤) ----
+  var drag=null;
+  function startCardDrag(ev, h){
     ev.preventDefault();
     var card = h.closest(".card");
     drag = { from:+card.dataset.index, startX:ev.clientX, startY:ev.clientY,
-             moved:false, ghost:null, target:null, card:card, pid:ev.pointerId };
-    window.addEventListener("pointermove", onMove, {passive:false});
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-  });
-  function onMove(ev){
+             lastX:ev.clientX, lastY:ev.clientY, moved:false, ghost:null,
+             target:null, card:card, scroller:null };
+    window.addEventListener("pointermove", onCardMove, {passive:false});
+    window.addEventListener("pointerup", onCardUp);
+    window.addEventListener("pointercancel", onCardUp);
+  }
+  function onCardMove(ev){
     if(!drag) return;
     var dx=ev.clientX-drag.startX, dy=ev.clientY-drag.startY;
     if(!drag.moved){
@@ -2898,32 +3012,50 @@ SOFTWARE.
         "border-radius:10px;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:.95;";
       document.body.appendChild(g); drag.ghost=g;
       drag.card.classList.add("dragging");
+      startAutoScroll();
     }
     ev.preventDefault();
+    drag.lastX=ev.clientX; drag.lastY=ev.clientY;
     drag.ghost.style.left=(ev.clientX-36)+"px";
     drag.ghost.style.top=(ev.clientY-36)+"px";
-    clearDrop();
-    var under = document.elementFromPoint(ev.clientX, ev.clientY);
-    var tc = under && under.closest && under.closest(".card");
-    if(tc && tc!==drag.card){
-      var ti=+tc.dataset.index, r=tc.getBoundingClientRect();
-      var after = ev.clientX > r.left + r.width/2;
-      drag.target = after ? ti+1 : ti;
-      tc.classList.add(after?"drop-after":"drop-before");
-    } else {
-      drag.target = null;
-    }
+    updateDropTarget(ev.clientX, ev.clientY);
   }
-  function onUp(){
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    window.removeEventListener("pointercancel", onUp);
+  function updateDropTarget(x, y){
+    clearDrop();
+    var cards=document.querySelectorAll('#groups .card');
+    var best=null, bestD=Infinity, bestIdx=photos.length;
+    cards.forEach(function(c){
+      if(c===drag.card) return;
+      var r=c.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+      var d=Math.hypot(x-cx, y-cy);
+      if(d<bestD){ bestD=d; best=c; var idx=+c.dataset.index; bestIdx=(x>cx)?idx+1:idx; }
+    });
+    drag.target=bestIdx;
+    if(best){ best.classList.add((bestIdx>+best.dataset.index)?'drop-after':'drop-before'); }
+  }
+  function startAutoScroll(){
+    if(drag.scroller) return;
+    drag.scroller=setInterval(function(){
+      if(!drag||!drag.moved) return;
+      var y=drag.lastY, h=window.innerHeight, m=72;
+      if(y<m) window.scrollBy(0,-14);
+      else if(y>h-m) window.scrollBy(0,14);
+      else return;
+      updateDropTarget(drag.lastX, drag.lastY);
+    },16);
+  }
+  function onCardUp(){
+    window.removeEventListener("pointermove", onCardMove);
+    window.removeEventListener("pointerup", onCardUp);
+    window.removeEventListener("pointercancel", onCardUp);
     if(!drag){ return; }
+    if(drag.scroller) clearInterval(drag.scroller);
     if(drag.ghost) drag.ghost.remove();
     drag.card.classList.remove("dragging");
     clearDrop();
-    if(drag.moved && drag.target!=null){ moveItem(drag.from, drag.target); }
-    drag=null; render();
+    var moved = drag.moved, from = drag.from, target = drag.target;
+    drag=null;
+    if(moved && target!=null){ moveItem(from, target); render(); }
   }
   function clearDrop(){
     var a=document.querySelectorAll(".drop-before,.drop-after");
@@ -2938,9 +3070,8 @@ SOFTWARE.
     clampBreaks();
   }
 
-  // ---- live recompute on input ----
-  ["startAt","endAt"].forEach(function(id){ $(id).addEventListener("input", render); });
-  $("wbd").addEventListener("input", function(){ $("wbdVal").textContent = $("wbd").value+"×"; render(); });
+  // ---- 입력 변경 시 갱신 ----
+  ["startAt","endAt"].forEach(function(id){ $(id).addEventListener("input", refreshTimes); });
 
   // ---- EXIF write ----
   function fileToDataURL(file){
@@ -2961,7 +3092,6 @@ SOFTWARE.
       obj["Exif"][piexif.ExifIFD.DateTimeDigitized]=dtStr;
       return piexif.insert(piexif.dump(obj), dataURL);
     }catch(e){
-      // 최소 구성으로 재시도 (방향 태그는 보존 시도)
       var zeroth={}, exif={};
       if(loaded && loaded["0th"] && loaded["0th"][piexif.ImageIFD.Orientation])
         zeroth[piexif.ImageIFD.Orientation]=loaded["0th"][piexif.ImageIFD.Orientation];
@@ -2998,7 +3128,7 @@ SOFTWARE.
         built.push({ blob:blob, name:name, timeStr:fmtTime(dates[i],multiDay),
                      file:new File([blob], name, {type:"image/jpeg"}), url:URL.createObjectURL(blob) });
         prog.value=i+1;
-        await new Promise(function(r){ setTimeout(r,0); }); // UI 양보
+        await new Promise(function(r){ setTimeout(r,0); });
       }
       showResults();
     }catch(err){
@@ -3018,19 +3148,23 @@ SOFTWARE.
   function showResults(){
     var sec=$("resultSec"); sec.style.display="block";
     built.forEach(function(b){ objectUrls.push(b.url); });
-    // share box
-    var canShareFiles = false;
-    try{ canShareFiles = !!(navigator.canShare && navigator.canShare({ files: built.map(function(b){return b.file;}) })); }
-    catch(e){ canShareFiles=false; }
+    var files = built.map(function(b){return b.file;});
+    var canShareFiles=false;
+    try{ canShareFiles = !!(navigator.canShare && navigator.canShare({ files: files })); }catch(e){ canShareFiles=false; }
+    var secure = window.isSecureContext;
     var sb=$("shareBox");
     if(canShareFiles){
-      sb.innerHTML='<button class="btn ok" id="shareBtn">사진에 저장 (공유시트 열기)</button>'+
-        '<div class="banner info" style="margin-top:10px">공유시트에서 <b>이미지 저장</b>(또는 "사진에 저장")을 누르면 '+built.length+'장이 EXIF 촬영시각과 함께 앨범에 들어갑니다.</div>';
+      sb.innerHTML='<button class="btn ok" id="shareBtn">사진 '+built.length+'장 한 번에 저장 (공유시트)</button>'+
+        '<div class="banner info" style="margin-top:10px"><b>일괄 저장:</b> 버튼 → 공유시트에서 <b>이미지 저장</b>(또는 "사진에 저장")을 누르면 '+
+        built.length+'장이 EXIF 촬영시각과 함께 앨범에 한 번에 들어갑니다.</div>';
       $("shareBtn").addEventListener("click", doShare);
+    } else if(!secure){
+      sb.innerHTML='<div class="banner warn"><b>일괄 저장(공유시트)은 HTTPS(보안 연결)에서만 동작합니다.</b><br>'+
+        '지금은 <code>http</code>로 접속 중이라 iOS가 파일 공유 API를 막았습니다. 아래 이미지를 <b>길게 눌러 "사진에 추가"</b>로 개별 저장하세요.<br>'+
+        'HTTPS로 접속하면(예: Synology 리버스 프록시, 또는 Docker의 9443 자체서명 포트) 버튼 하나로 '+built.length+'장을 한 번에 저장할 수 있습니다. README의 <b>Docker 배포 › HTTPS</b> 참고.</div>';
     } else {
-      sb.innerHTML='<div class="banner warn">이 브라우저는 파일 공유(Web Share)를 지원하지 않습니다. 아래 각 이미지를 <b>길게 눌러 "사진에 추가"</b> 하거나 다운로드하세요.</div>';
+      sb.innerHTML='<div class="banner warn">이 브라우저는 파일 공유(Web Share)를 지원하지 않습니다. 아래 이미지를 <b>길게 눌러 "사진에 추가"</b> 하거나 다운로드하세요.</div>';
     }
-    // grid
     var g=$("results"); g.innerHTML="";
     built.forEach(function(b){
       var fig=document.createElement("figure");
@@ -3038,17 +3172,16 @@ SOFTWARE.
         '<figcaption>'+escapeHtml(b.timeStr)+'</figcaption>';
       g.appendChild(fig);
     });
-    $("saveHelp").innerHTML='저장 방식별 안내는 <a class="link" href="exif-test.html">검증 페이지</a> 참고. '+
-      '공유시트 저장이 촬영시각을 덮어쓰는 기기라면 <b>Metapho</b> 등 메타데이터 편집 앱 경유가 최후 대안입니다 (README 참고).';
+    $("saveHelp").innerHTML='공유시트 저장이 촬영시각을 덮어쓰는 기기라면 <b>Metapho</b> 등 메타데이터 편집 앱 경유가 최후 대안입니다 (README 참고). '+
+      '먼저 <a class="link" href="exif-test.html">검증 페이지</a>로 1장 확인을 권합니다.';
     sec.scrollIntoView({behavior:"smooth", block:"start"});
   }
 
   async function doShare(){
     try{
-      await navigator.share({ files: built.map(function(b){return b.file;}),
-        title:"촬영시각 기입 사진", text:"" });
+      await navigator.share({ files: built.map(function(b){return b.file;}), title:"촬영시각 기입 사진", text:"" });
     }catch(err){
-      if(err && err.name==="AbortError") return; // 사용자가 취소
+      if(err && err.name==="AbortError") return;
       $("shareBox").insertAdjacentHTML("beforeend",
         '<div class="banner bad" style="margin-top:8px">공유 실패: '+escapeHtml(err&&err.message||String(err))+
         '. 아래 이미지를 길게 눌러 "사진에 추가"로 저장하세요.</div>');
