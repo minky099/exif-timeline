@@ -2,6 +2,7 @@ services:
   exif-timeline:
     build: .
     image: exif-timeline:latest
+    pull_policy: build   # 레지스트리 pull 시도(경고) 없이 항상 로컬 빌드
     container_name: exif-timeline
     ports:
       - "9003:9003"   # 9003 = EXIF DateTimeOriginal 태그 0x9003
