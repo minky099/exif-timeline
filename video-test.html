@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>MP4 촬영시각 최소 검증</title>
+<style>
+:root{--paper:#f2ecdf;--card:#fbf8f0;--ink:#2b2417;--muted:#70634b;--dim:#a09174;
+  --line:#ddd3bc;--line2:#c2b493;--accent:#bf3b1f;--ok:#2f6b4f;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",Roboto,sans-serif;
+  line-height:1.5;
+  padding:calc(env(safe-area-inset-top) + 16px) calc(env(safe-area-inset-right) + 16px)
+          calc(env(safe-area-inset-bottom) + 32px) calc(env(safe-area-inset-left) + 16px);}
+main{max-width:560px;margin:0 auto;}
+h1{font-size:1.2rem;margin:0 0 4px;font-weight:800;letter-spacing:-.01em;}
+.stamp{display:inline-block;font-family:var(--mono);font-size:.58rem;font-weight:700;color:var(--accent);
+  border:1.5px solid var(--accent);border-radius:2px;padding:2px 6px;margin-left:8px;
+  letter-spacing:.14em;vertical-align:4px;transform:rotate(-4deg);opacity:.85;}
+.sub{color:var(--muted);font-size:.82rem;margin:0 0 18px;line-height:1.55;}
+section{background:var(--card);border:1px solid var(--line2);border-radius:3px;
+  padding:16px 14px;margin:0 0 16px;box-shadow:3px 3px 0 rgba(43,36,23,.07);}
+.n{font-size:.78rem;color:var(--muted);font-weight:700;margin:0 0 12px;
+  letter-spacing:.08em;display:flex;align-items:center;gap:8px;}
+.n b{flex:none;display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;
+  background:var(--ink);color:var(--paper);border-radius:2px;font-size:.72rem;font-family:var(--mono);}
+label.file{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px;
+  border:1.5px dashed var(--line2);border-radius:3px;background:transparent;color:var(--muted);
+  font-weight:700;cursor:pointer;}
+label.file:active{background:rgba(43,36,23,.05);}
+input[type=file]{display:none;}
+input[type="datetime-local"]{width:100%;padding:10px 11px;border-radius:3px;border:1px solid var(--line2);
+  background:#fff;color:var(--ink);font-size:15px;font-family:var(--mono);}
+.btn{appearance:none;border:none;border-radius:3px;font-weight:700;font-size:15px;padding:13px 16px;
+  color:var(--paper);background:var(--ink);width:100%;cursor:pointer;margin-top:6px;
+  box-shadow:2px 2px 0 rgba(43,36,23,.28);}
+.btn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 rgba(43,36,23,.28);}
+.btn.ok{background:var(--ok);}
+.btn[disabled]{opacity:.4;box-shadow:none;}
+video.preview{width:100%;display:block;margin-top:10px;background:#000;
+  border:1px solid var(--line);padding:5px;box-shadow:0 2px 6px rgba(43,36,23,.2);}
+.banner{border-radius:3px;padding:11px 13px;font-size:.8rem;margin:10px 0 0;
+  border:1px solid;border-left-width:4px;line-height:1.55;}
+.banner.warn{background:#f6ecd2;border-color:#cfae5e;color:#6f4e0c;}
+.banner.bad{background:#f7e0d8;border-color:#cf8a76;color:#8c2917;}
+.banner.info{background:#e6e9f2;border-color:#93a3c4;color:#39517d;}
+.banner.ok{background:#e0ecdf;border-color:#8fb896;color:#2c5a3f;}
+.hint{font-size:.74rem;color:var(--dim);line-height:1.65;margin-top:12px;}
+.hint code{background:rgba(43,36,23,.06);padding:1px 5px;border-radius:2px;color:var(--muted);font-family:var(--mono);}
+a.link{color:var(--accent);text-decoration:underline;text-underline-offset:2px;}
+ol{padding-left:1.2em;margin:8px 0 0;} ol li{margin:4px 0;}
+</style>
+</head>
+<body>
+<main>
+  <h1>MP4 촬영시각 최소 검증 <span class="stamp">MVHD</span></h1>
+  <p class="sub">동영상 1개의 MP4 컨테이너 <b>creation_time</b>(mvhd·tkhd·mdhd)을 임의 시각으로
+    바이너리 패치해 저장 → iOS 사진앱이 그 시각을 촬영일로 인식하는지 <b>실기기에서 확인</b>하는 페이지입니다.
+    재인코딩 없이 몇 바이트만 바꿉니다.</p>
+
+  <section>
+    <div class="n"><b>1</b> MP4 1개 선택</div>
+    <label class="file" for="pick">＋ 동영상 선택</label>
+    <input id="pick" type="file" accept="video/mp4,video/quicktime,video/*">
+    <div id="fileMsg"></div>
+    <video id="preview" class="preview" style="display:none" controls playsinline preload="metadata"></video>
+  </section>
+
+  <section>
+    <div class="n"><b>2</b> 기입할 촬영시각</div>
+    <input id="dt" type="datetime-local" step="1">
+    <div class="hint">MP4 박스 <code>mvhd</code> · <code>tkhd</code> · <code>mdhd</code>의
+      <code>creation_time</code>/<code>modification_time</code>에 이 시각(UTC 변환)을 씁니다.</div>
+  </section>
+
+  <section>
+    <div class="n"><b>3</b> 기입 &amp; 저장</div>
+    <button id="write" class="btn" disabled>시각 기입하기</button>
+    <div id="out"></div>
+  </section>
+
+  <section>
+    <div class="n"><b>✓</b> 검증 절차</div>
+    <ol style="font-size:.84rem;color:var(--muted)">
+      <li>위에서 저장(공유시트 <b>비디오 저장</b> 또는 다운로드 → 파일앱 → 사진앱 가져오기)</li>
+      <li>사진앱에서 방금 저장된 동영상의 <b>정보(ⓘ)</b> 확인 → 날짜/시각이 기입값과 같은지</li>
+      <li>일치하면 <b>검증 성공</b> → 본 앱에 동영상 지원을 통합할 수 있음</li>
+      <li>다르면(저장 시각으로 잡힘) → 저장 경로를 바꿔 재시도, 결과를 공유해 주세요</li>
+    </ol>
+  </section>
+
+  <p style="text-align:center"><a class="link" href="index.html">← 본 앱(사진 여러 장)으로</a></p>
+</main>
+
+<script>
+"use strict";
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function pad(n){ return String(n).padStart(2,"0"); }
+  var EPOCH_1904 = 2082844800; // 1904-01-01T00:00:00Z ~ 1970-01-01 (초)
+
+  var now=new Date(); now.setSeconds(0,0);
+  $("dt").value = now.getFullYear()+"-"+pad(now.getMonth()+1)+"-"+pad(now.getDate())+"T"+
+    pad(now.getHours())+":"+pad(now.getMinutes())+":"+pad(now.getSeconds());
+
+  var curFile=null, curURL=null;
+
+  $("pick").addEventListener("change", async function(ev){
+    var f=ev.target.files[0]; ev.target.value="";
+    if(!f) return;
+    var head; try{ head=new Uint8Array(await f.slice(0,12).arrayBuffer()); }catch(e){ head=new Uint8Array(0); }
+    var isBmff = head.length>=8 && head[4]===0x66&&head[5]===0x74&&head[6]===0x79&&head[7]===0x70; // 'ftyp'
+    if(!isBmff){
+      $("fileMsg").innerHTML='<div class="banner warn">MP4/MOV 컨테이너가 아닙니다(ftyp 없음). 카톡으로 받은 동영상(MP4)으로 시도하세요.</div>';
+      $("write").disabled=true; $("preview").style.display="none"; curFile=null; return;
+    }
+    $("fileMsg").innerHTML="";
+    curFile=f;
+    if(curURL) URL.revokeObjectURL(curURL);
+    curURL=URL.createObjectURL(f);
+    var pv=$("preview"); pv.src=curURL; pv.style.display="block";
+    $("write").disabled=false;
+  });
+
+  function parseLocal(v){
+    var m=v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if(!m) return null;
+    return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], m[6]?+m[6]:0, 0);
+  }
+
+  // MP4/ISO-BMFF 박스를 걸어가며 mvhd/tkhd/mdhd의 creation/modification time을 제자리 패치
+  function patchMp4Dates(u8, unixSec){
+    var dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    var t = unixSec + EPOCH_1904;
+    var patched = [];
+    var CONTAINERS = {moov:1, trak:1, mdia:1};
+    function walk(start, end){
+      var off = start;
+      while(off + 8 <= end){
+        var size = dv.getUint32(off);
+        var type = String.fromCharCode(u8[off+4],u8[off+5],u8[off+6],u8[off+7]);
+        var hdr = 8;
+        if(size === 1){
+          if(off+16 > end) return;
+          size = Number(dv.getBigUint64(off+8)); hdr = 16;
+        } else if(size === 0){
+          size = end - off;
+        }
+        if(size < hdr || off + size > end) return; // 손상 방지
+        if(CONTAINERS[type]){
+          walk(off+hdr, off+size);
+        } else if(type==="mvhd"||type==="tkhd"||type==="mdhd"){
+          var ver = u8[off+hdr];
+          var base = off+hdr+4; // version(1)+flags(3) 다음
+          if(ver===0){
+            if(base+8 <= off+size){ dv.setUint32(base, t); dv.setUint32(base+4, t); patched.push(type+"/v0"); }
+          } else if(ver===1){
+            if(base+16 <= off+size){ dv.setBigUint64(base, BigInt(t)); dv.setBigUint64(base+8, BigInt(t)); patched.push(type+"/v1"); }
+          }
+        }
+        off += size;
+      }
+    }
+    walk(0, u8.byteLength);
+    return patched;
+  }
+
+  // 애플 QuickTime 메타키 존재 여부 검사 (있으면 iOS가 그쪽을 우선 읽을 수 있어 결과 해석에 참고)
+  function findQtCreationKey(u8){
+    var needle = "com.apple.quicktime.creationdate";
+    var n0 = needle.charCodeAt(0);
+    outer:
+    for(var i=0; i<=u8.length-needle.length; i++){
+      if(u8[i]!==n0) continue;
+      for(var j=1;j<needle.length;j++){
+        if(u8[i+j]!==needle.charCodeAt(j)) continue outer;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  $("write").addEventListener("click", async function(){
+    if(!curFile) return;
+    var d = parseLocal($("dt").value);
+    if(!d){ $("out").innerHTML='<div class="banner bad">시각 형식 오류</div>'; return; }
+    var out=$("out"); out.innerHTML='처리 중…';
+    try{
+      var buf = await curFile.arrayBuffer();
+      var u8 = new Uint8Array(buf);
+      var patched = patchMp4Dates(u8, Math.floor(d.getTime()/1000));
+      if(!patched.length){
+        out.innerHTML='<div class="banner bad"><b>패치 실패:</b> mvhd/tkhd/mdhd 박스를 찾지 못했습니다. 이 파일 구조를 알려주시면 대응하겠습니다.</div>';
+        return;
+      }
+      var hasQtKey = findQtCreationKey(u8);
+      var blob=new Blob([u8],{type:"video/mp4"});
+      var name=(curFile.name.replace(/\.[^.]+$/,"")||"video")+"_dated.mp4";
+      var file=new File([blob],name,{type:"video/mp4"});
+      var bURL=URL.createObjectURL(blob);
+      var canShare=false; try{ canShare=!!(navigator.canShare&&navigator.canShare({files:[file]})); }catch(e){}
+      var html='<div class="banner ok"><b>기입 완료</b> — '+$("dt").value.replace("T"," ")+
+        ' <span style="opacity:.75">('+patched.join(", ")+')</span></div>';
+      if(hasQtKey){
+        html+='<div class="banner warn"><b>참고:</b> 이 파일에는 애플 QuickTime 날짜 키'+
+          '(<code>com.apple.quicktime.creationdate</code>)가 남아 있습니다. iOS가 그 값을 우선 읽으면 '+
+          '기입한 시각과 다르게 보일 수 있으니 검증 결과 해석에 참고하세요.</div>';
+      }
+      if(canShare) html+='<button class="btn ok" id="share">사진에 저장 (공유시트)</button>';
+      html+='<div class="hint"><a class="link" href="'+bURL+'" download="'+name+'">다운로드</a> 후 '+
+        '파일앱 → 공유 → "비디오 저장"으로 사진앱에 넣을 수도 있습니다.</div>';
+      out.innerHTML=html;
+      var sb=$("share");
+      if(sb) sb.addEventListener("click", async function(){
+        try{ await navigator.share({files:[file], title:"MP4 시각 검증"}); }
+        catch(e){ if(e&&e.name!=="AbortError") out.insertAdjacentHTML("beforeend",'<div class="banner bad">공유 실패: '+(e.message||e)+'. 다운로드 경로를 이용하세요.</div>'); }
+      });
+    }catch(err){
+      out.innerHTML='<div class="banner bad">오류: '+(err&&err.message||err)+'</div>';
+    }
+  });
+})();
+</script>
+</body>
+</html>

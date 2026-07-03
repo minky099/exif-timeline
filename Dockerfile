@@ -12,7 +12,7 @@ COPY docker-entrypoint.d/40-selfsigned-cert.sh /docker-entrypoint.d/40-selfsigne
 RUN chmod +x /docker-entrypoint.d/40-selfsigned-cert.sh
 
 # 앱 파일 배치
-COPY index.html exif-test.html /usr/share/nginx/html/
+COPY index.html exif-test.html video-test.html /usr/share/nginx/html/
 
 EXPOSE 9003 9443
 
