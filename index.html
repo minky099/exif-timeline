@@ -33,6 +33,10 @@ section{background:var(--card);border:1px solid var(--line2);border-radius:3px;
   padding:16px 14px;margin:0 0 18px;box-shadow:3px 3px 0 rgba(43,36,23,.07);}
 .sec-title{font-size:.78rem;color:var(--muted);font-weight:700;margin:0 0 12px;
   letter-spacing:.08em;display:flex;align-items:center;gap:8px;}
+.sec-title .rev{margin-left:auto;background:#fff;border:1px solid var(--line2);color:var(--muted);
+  border-radius:2px;padding:5px 10px;font-size:11.5px;font-weight:700;cursor:pointer;letter-spacing:.02em;}
+.sec-title .rev:active{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+.sec-title .rev[disabled]{opacity:.4;cursor:default;}
 .sec-title b{flex:none;display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;
   background:var(--ink);color:var(--paper);border-radius:2px;font-size:.72rem;font-family:var(--mono);font-weight:700;}
 label.file{display:flex;align-items:center;justify-content:center;gap:8px;
@@ -173,7 +177,7 @@ progress{width:100%;height:6px;margin-top:8px;accent-color:var(--accent);}
   </section>
 
   <section>
-    <div class="sec-title"><b>3</b> 순서 &amp; 묶음 <span style="color:var(--dim)" id="countLbl"></span></div>
+    <div class="sec-title"><b>3</b> 순서 &amp; 묶음 <span style="color:var(--dim)" id="countLbl"></span><button class="rev" id="revBtn" disabled>⇅ 순서 뒤집기</button></div>
     <div class="hint" style="margin-top:0;margin-bottom:10px">
       ≡ 손잡이를 끌어 <b>순서 변경</b>(묶음 간 이동 포함) · 썸네일의 <b>나누기</b>로 경계 추가 · 묶음 머리의 <b>합치기</b>로 제거<br>
       각 묶음의 <b>슬라이더 양 끝</b>을 끌어 그 묶음의 시간대를 정하세요. 묶음 안은 그 구간에 고르게 배분됩니다.
@@ -2732,6 +2736,16 @@ SOFTWARE.
     addFiles(list);
   });
 
+  $("revBtn").addEventListener("click", function(){
+    if(photos.length<2) return;
+    var n = photos.length;
+    photos.reverse();
+    // 경계 거울 반전: 옛 i(사진 i-1|i 사이) → 새 n-i
+    breaks = new Set(Array.from(breaks, function(i){ return n - i; }));
+    clampBreaks();
+    render();
+  });
+
   async function addFiles(fileList){
     var skipped = [];
     for(var i=0;i<fileList.length;i++){
@@ -2837,6 +2851,7 @@ SOFTWARE.
   function render(){
     var n = photos.length;
     $("countLbl").textContent = n? "· "+n+"장" : "";
+    $("revBtn").disabled = n<2;
     $("emptyMsg").style.display = n? "none":"block";
 
     var groups = groupsOf(); syncGroupFracs(groups.length);
