@@ -1,0 +1,8 @@
+services:
+  exif-timeline:
+    build: .
+    image: exif-timeline:latest
+    container_name: exif-timeline
+    ports:
+      - "9003:9003"   # 9003 = EXIF DateTimeOriginal 태그 0x9003
+    restart: unless-stopped
