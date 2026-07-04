@@ -95,6 +95,35 @@ docker run -d --name exif-timeline -e TLS_HOST=192.168.1.50 \
 2. **리버스 프록시 + 정식 인증서(권장):** Synology 리버스 프록시로 `https://` 도메인(예: `*.synology.me`,
    Let's Encrypt)을 9003 앞에 붙이면, 경고 없이 신뢰된 HTTPS로 일괄 저장이 바로 된다.
 
+#### 흔한 함정: 프록시 뒤가 HTTPS여도 브라우저 구간이 HTTP면 소용없다
+보안 컨텍스트는 **브라우저 ↔ 프록시 구간의 스킴**으로만 판정된다.
+Nginx Proxy Manager(NPM)에서 백엔드를 `https://…:9443`으로 잡아도, 접속을
+`http://exif.internal` 로 하면 평문이라 공유시트가 막힌다. 반드시 **https://** 로 접속해야 한다.
+
+#### NPM + 사설 도메인(`exif.internal` 등) 설정
+`.internal` 같은 사설 도메인은 Let's Encrypt 발급이 불가 → 자체서명 인증서를 NPM에 올린다.
+
+1. 인증서 생성 (iOS는 **825일 초과 인증서를 거부**하므로 800일로):
+   ```bash
+   openssl req -x509 -newkey rsa:2048 -nodes \
+     -keyout exif.internal.key -out exif.internal.crt -days 800 \
+     -subj "/CN=exif.internal" \
+     -addext "subjectAltName=DNS:exif.internal" \
+     -addext "extendedKeyUsage=serverAuth" -addext "basicConstraints=CA:TRUE"
+   ```
+2. NPM › SSL Certificates › Add › **Custom** → key/crt 업로드
+3. Proxy Host(`exif.internal`) 설정:
+   - Forward: `http` / `172.17.0.1` / `9003` (TLS는 NPM이 종단하므로 백엔드는 HTTP 9003이면 충분)
+   - SSL 탭: 위 인증서 선택 + **Force SSL** (http 접속을 https로 리다이렉트)
+4. 아이폰에서 인증서 신뢰(최초 1회):
+   - Safari로 `.crt` 파일 열기(에어드랍/이메일, 또는 내장 서버의 `http://<NAS-IP>:9003/cert`)
+   - 설정 › 일반 › VPN 및 기기 관리 › 프로파일 **설치**
+   - 설정 › 일반 › 정보 › **인증서 신뢰 설정** › 해당 인증서 **켬**
+5. `https://exif.internal` 접속 → 일괄 저장 활성 ✅
+
+> 내장 9443 인증서도 같은 방식으로 신뢰하면 된다: `http://<NAS-IP>:9003/cert` 에서 받기.
+> 단, SAN에 접속 주소가 포함되어야 하므로 `TLS_HOST`를 NAS IP로 설정해 발급했어야 한다.
+
 ---
 
 ## 저장 방식 (iOS)

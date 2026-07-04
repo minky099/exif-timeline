@@ -26,11 +26,14 @@ if [ -n "$TLS_SANS" ]; then
   SAN="$SAN,$TLS_SANS"
 fi
 
+# iOS는 유효기간 825일 초과 TLS 인증서를 신뢰 설정해도 거부한다 → 800일로 발급
 echo "[cert] 자체서명 인증서 생성 (SAN=$SAN)"
 openssl req -x509 -newkey rsa:2048 -nodes \
-  -keyout "$KEY" -out "$CRT" -days 3650 \
+  -keyout "$KEY" -out "$CRT" -days 800 \
   -subj "/CN=exif-timeline" \
-  -addext "subjectAltName=$SAN" >/dev/null 2>&1
+  -addext "subjectAltName=$SAN" \
+  -addext "extendedKeyUsage=serverAuth" \
+  -addext "basicConstraints=CA:TRUE" >/dev/null 2>&1
 
 chmod 600 "$KEY"
 echo "[cert] 생성 완료: $CRT"
