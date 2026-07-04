@@ -118,14 +118,20 @@ Nginx Proxy Manager(NPM)에서 백엔드를 `https://…:9443`으로 잡아도, 
 3. Proxy Host(`exif.internal`) 설정:
    - Forward: `http` / `172.17.0.1` / `9003` (TLS는 NPM이 종단하므로 백엔드는 HTTP 9003이면 충분)
    - SSL 탭: 위 인증서 선택 + **Force SSL** (http 접속을 https로 리다이렉트)
-4. 아이폰에서 인증서 신뢰(최초 1회):
-   - Safari로 `.crt` 파일 열기(에어드랍/이메일, 또는 내장 서버의 `http://<NAS-IP>:9003/cert`)
+4. 아이폰에서 인증서 신뢰(최초 1회) — **반드시 NPM에 올린 그 `.crt`(CN=exif.internal)를 설치**:
+   - `.crt`를 에어드랍/이메일로 아이폰에서 열기, 또는 아래처럼 컨테이너의 `/cert` 엔드포인트에 등록해 받기:
+     ```bash
+     docker cp exif.internal.crt exif-timeline:/etc/nginx/certs/public.crt
+     # 이후 아이폰 Safari에서 http://<NAS-IP>:9003/cert 접속 → 프로파일 설치
+     ```
    - 설정 › 일반 › VPN 및 기기 관리 › 프로파일 **설치**
    - 설정 › 일반 › 정보 › **인증서 신뢰 설정** › 해당 인증서 **켬**
 5. `https://exif.internal` 접속 → 일괄 저장 활성 ✅
 
-> 내장 9443 인증서도 같은 방식으로 신뢰하면 된다: `http://<NAS-IP>:9003/cert` 에서 받기.
-> 단, SAN에 접속 주소가 포함되어야 하므로 `TLS_HOST`를 NAS IP로 설정해 발급했어야 한다.
+> ⚠️ **`/cert`가 주는 인증서와 NPM 인증서를 혼동하지 말 것.** `public.crt`를 등록하지 않았다면
+> `/cert`는 컨테이너 **내장 9443용** 인증서(CN=exif-timeline)를 준다 — 이건 NPM(exif.internal)
+> 접속에는 소용없다. 위처럼 `public.crt`를 넣어두면 `/cert`가 그걸 우선 서빙한다.
+> (잘못 설치한 프로파일은 설정 › 일반 › VPN 및 기기 관리에서 삭제하면 된다.)
 
 ---
 
