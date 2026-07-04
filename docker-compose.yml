@@ -5,8 +5,10 @@ services:
     pull_policy: build   # 레지스트리 pull 시도(경고) 없이 항상 로컬 빌드
     container_name: exif-timeline
     ports:
-      - "9003:9003"   # HTTP  (9003 = EXIF DateTimeOriginal 태그 0x9003)
-      - "9443:9443"   # HTTPS (자체서명 · 공유시트 일괄 저장용)
+      - "9003:9003"   # HTTP (9003 = EXIF DateTimeOriginal 태그 0x9003) — 리버스 프록시(NPM 등)의 백엔드
+      # 내장 자체서명 HTTPS. NPM 등 리버스 프록시가 TLS를 종단하면 불필요 — 프록시 없이
+      # 직접 https 접속이 필요할 때만 주석 해제:
+      # - "9443:9443"
     environment:
       # 아이폰에서 https로 접속할 NAS의 IP나 호스트명. 자체서명 인증서 SAN에 포함된다.
       # 예: TLS_HOST=192.168.1.50  (docker compose 실행 시 환경변수로 넘기거나 여기 직접 기입)
